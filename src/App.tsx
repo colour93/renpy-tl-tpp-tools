@@ -1,20 +1,21 @@
 import { IconUpload } from "@douyinfe/semi-icons";
-import { Button, Upload } from "@douyinfe/semi-ui";
-import React, { useState } from "react";
+import { Button, Form, Layout, Row, Upload } from "@douyinfe/semi-ui";
+import React from "react";
 import { unzipSync, zipSync } from "fflate";
 import * as xlsx from "xlsx";
 import { customRequestArgs } from "@douyinfe/semi-ui/lib/es/upload/interface";
 import { RenPyTlData } from "types/RenPyTlData";
 import FileSaver from "file-saver";
+import Section from "@douyinfe/semi-ui/lib/es/form/section";
 //[ package ]
 
 const regex = {
   translateStringsGroup:
-    /^translate (\w+) strings:(?:\r?\n(?:(?:^ *$)|(?:^ +.+$)))+/gm,
+    /^translate (\w+) strings:(?:\r?\n\r?\n[ 	]+# \S+\r?\n[ 	]+old ".*"\r?\n[ 	]+new ".*")+/gm,
   translateStringsItem:
     /^[ 	]+#\s*(\S+)\s*\r?\n +old *"(.*)" *\r?\n +new *".*" */gm,
   translateUUIDItem:
-    /^# (\S+)\r?\ntranslate (\w+) (\w+):(?:\r?\n)+[  ]+# "(.*)"\r?\n[    ]+".*"/gm,
+    /^# (\S+)\r?\ntranslate (\w+) (\w+):(?:\r?\n)+[  ]+#.+"(.*)"\r?\n.+".*"/gm,
 };
 
 const xlsxHeaders = [
@@ -23,6 +24,7 @@ const xlsxHeaders = [
   "Machine translation",
   "Better translation",
   "Best translation",
+  "Raw File",
 ];
 
 //=> Main Component
@@ -30,77 +32,47 @@ export default () => {
   const processRawText = (text: string, fileName: string) => {
     let match: RegExpExecArray | null;
 
-    let result: RenPyTlData;
+    let result: RenPyTlData[] = [];
 
-    if ((match = regex.translateStringsGroup.exec(text)) !== null) {
+    while ((match = regex.translateStringsGroup.exec(text)) !== null) {
       const content = match[0];
       const language = match[1];
 
-      result = {
-        type: "strings",
-        file: fileName,
-        language,
-        data: [],
-      };
-
-      let itemMatch;
+      let itemMatch: RegExpExecArray | null;
 
       while ((itemMatch = regex.translateStringsItem.exec(content)) !== null) {
         const item = itemMatch[0];
         const rawFile = itemMatch[1];
         const old = itemMatch[2];
-        result.data.push({
+        result.push({
+          type: "strings",
+          language,
           rawFile,
           old,
         });
       }
-    } else {
-      if ((match = regex.translateUUIDItem.exec(text)) !== null) {
-        const language = match[2];
-        const rawFile = match[1];
-        const uuid = match[3];
-        const old = match[4];
+    }
 
-        result = {
-          type: "uuid",
-          file: fileName,
-          language,
-          data: [
-            {
-              rawFile,
-              uuid,
-              old,
-            },
-          ],
-        };
+    while ((match = regex.translateUUIDItem.exec(text)) !== null) {
+      const language = match[2];
+      const rawFile = match[1];
+      const uuid = match[3];
+      const old = match[4];
 
-        while ((match = regex.translateUUIDItem.exec(text)) !== null) {
-          const rawFile = match[1];
-          const uuid = match[3];
-          const old = match[4];
-
-          result.data.push({
-            rawFile,
-            uuid,
-            old,
-          });
-        }
-      } else {
-        return;
-      }
+      result.push({
+        type: "uuid",
+        language,
+        rawFile,
+        uuid,
+        old,
+      });
     }
 
     const workbook = xlsx.utils.book_new();
 
     const data = [
-      [
-        "Original Text",
-        "Initial",
-        "Machine translation",
-        "Better translation",
-        "Best translation",
-      ],
-      ...result.data.map(({ old }) => [old]),
+      xlsxHeaders,
+      ...result.map(({ old, rawFile }) => [old, , , , , rawFile]),
     ];
 
     const worksheet = xlsx.utils.aoa_to_sheet(data);
@@ -118,7 +90,7 @@ export default () => {
     };
   };
 
-  const handleSelectFile = ({
+  const handleRTTFile = ({
     file,
     onProgress,
     onError,
@@ -193,12 +165,28 @@ export default () => {
   };
 
   return (
-    <>
-      <Upload customRequest={handleSelectFile}>
-        <Button icon={<IconUpload />} theme="light">
-          选择压缩包
-        </Button>
-      </Upload>
-    </>
+    <Layout>
+      <Form layout="horizontal">
+        <Section text={"RenPy-Tl 转 Translator++"}>
+          <Row>主要用于使用其他兼容 Translator++ 格式的翻译工具</Row>
+          <Row>
+            <Upload customRequest={handleRTTFile}>
+              <Button icon={<IconUpload />} theme="light">
+                选择 tl 的 zip 压缩包 (请确保不是父文件夹)
+              </Button>
+            </Upload>
+          </Row>
+        </Section>
+        <Section text={"Translator++ 转 RenPy-Tl"}>
+          <Row>
+            <Upload>
+              <Button icon={<IconUpload />} theme="light">
+                选择已转换且已翻译的 zip 压缩包
+              </Button>
+            </Upload>
+          </Row>
+        </Section>
+      </Form>
+    </Layout>
   );
 };
