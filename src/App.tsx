@@ -110,6 +110,7 @@ export default () => {
 
       const textDecoder = new TextDecoder("utf-8");
 
+      // 筛选 rpy
       const rpyFiles = Object.keys(rawData).filter((fileName) =>
         fileName.endsWith(".rpy")
       );
@@ -122,11 +123,13 @@ export default () => {
       let xmlFiles: any = new Object();
       let jsonFiles: any = new Object();
 
+      // 遍历 rpy
       for (const [index, fileName] of rpyFiles.entries()) {
         const fileData = rawData[fileName];
 
         const rpyContent = textDecoder.decode(fileData);
 
+        // 处理
         const rpyData = processRawText(rpyContent, fileName);
 
         onProgress({
@@ -142,6 +145,7 @@ export default () => {
         }
       }
 
+      // 打包
       const resultZip = zipSync({
         data: jsonFiles,
         xml: xmlFiles,
@@ -153,12 +157,32 @@ export default () => {
         loaded: 100,
       });
 
+      // 下载
       FileSaver.saveAs(
         new Blob([resultZip], { type: "application/octet-stream" }),
         `${file.name}-${+new Date()}.zip`
       );
 
       onSuccess({});
+    };
+
+    reader.readAsArrayBuffer(file.fileInstance);
+  };
+
+  const handleTTRFile = ({
+    file,
+    onProgress,
+    onSuccess,
+    onError,
+  }: customRequestArgs) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const compressedData = new Uint8Array(e.target.result as ArrayBuffer);
+
+      // 解压
+      const data = unzipSync(compressedData);
+
+      console.log(data);
     };
 
     reader.readAsArrayBuffer(file.fileInstance);
@@ -179,7 +203,7 @@ export default () => {
         </Section>
         <Section text={"Translator++ 转 RenPy-Tl"}>
           <Row>
-            <Upload>
+            <Upload customRequest={handleTTRFile}>
               <Button icon={<IconUpload />} theme="light">
                 选择已转换且已翻译的 zip 压缩包
               </Button>
