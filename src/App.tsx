@@ -25,10 +25,29 @@ const xlsxHeaders = [
   "Better translation",
   "Best translation",
   "Raw File",
+  "RPY File Line",
 ];
 
 //=> Main Component
 export default () => {
+  const textDecoder = new TextDecoder("utf-8");
+  const textEncoder = new TextEncoder();
+
+  const replaceTextInQuotes = (
+    text: string,
+    lineNumber: number,
+    newText: string
+  ): string => {
+    const lines = text.split("\n");
+    const updatedLines = lines.map((line, index) => {
+      if (index === lineNumber - 1) {
+        return line.replace(/"([^"]*)"/g, `"${newText}"`);
+      }
+      return line;
+    });
+    return updatedLines.join("\n");
+  };
+
   const processRawText = (text: string, fileName: string) => {
     let match: RegExpExecArray | null;
 
@@ -44,27 +63,33 @@ export default () => {
         const item = itemMatch[0];
         const rawFile = itemMatch[1];
         const old = itemMatch[2];
+        const charPosition = text.indexOf(item);
+        const line = text.substring(0, charPosition).split("\n").length;
         result.push({
           type: "strings",
           language,
           rawFile,
           old,
+          line,
         });
       }
     }
 
     while ((match = regex.translateUUIDItem.exec(text)) !== null) {
+      const item = match[0];
       const language = match[2];
       const rawFile = match[1];
       const uuid = match[3];
       const old = match[4];
-
+      const charPosition = text.indexOf(item);
+      const line = text.substring(0, charPosition).split("\n").length;
       result.push({
         type: "uuid",
         language,
         rawFile,
         uuid,
         old,
+        line,
       });
     }
 
@@ -72,7 +97,7 @@ export default () => {
 
     const data = [
       xlsxHeaders,
-      ...result.map(({ old, rawFile }) => [old, , , , , rawFile]),
+      ...result.map(({ old, rawFile, line }) => [old, , , , , rawFile, line]),
     ];
 
     const worksheet = xlsx.utils.aoa_to_sheet(data);
@@ -80,7 +105,7 @@ export default () => {
     xlsx.utils.book_append_sheet(workbook, worksheet, "Worksheet");
 
     return {
-      data: new TextEncoder().encode(JSON.stringify(result, null, 2)),
+      data: textEncoder.encode(JSON.stringify(result, null, 2)),
       xml: new Uint8Array(
         xlsx.write(workbook, {
           bookType: "xlsx",
@@ -93,7 +118,6 @@ export default () => {
   const handleRTTFile = ({
     file,
     onProgress,
-    onError,
     onSuccess,
   }: customRequestArgs) => {
     const reader = new FileReader();
@@ -107,8 +131,6 @@ export default () => {
         total: 100,
         loaded: 20,
       });
-
-      const textDecoder = new TextDecoder("utf-8");
 
       // 筛选 rpy
       const rpyFiles = Object.keys(rawData).filter((fileName) =>
@@ -169,11 +191,38 @@ export default () => {
     reader.readAsArrayBuffer(file.fileInstance);
   };
 
+  const processProcessedXlsx = (xlsxFile: Uint8Array, rpyFile: Uint8Array) => {
+    // 读入 rpyFile
+    let rpyFileText = textDecoder.decode(rpyFile);
+
+    // 读取 xlsx
+    const workbook = xlsx.read(xlsxFile);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    // 获取行数
+    const range = xlsx.utils.decode_range(worksheet["!ref"]);
+    const rowCount = range.e.r - range.s.r + 1;
+
+    // 从第二行开始遍历
+    for (let i = 1; i < rowCount; i++) {
+      const rawText = worksheet[xlsx.utils.encode_cell({ r: i, c: 0 })].v;
+      const translatedText =
+        worksheet[xlsx.utils.encode_cell({ r: i, c: 1 })]?.v ?? "";
+      const row: number | undefined =
+        parseInt(worksheet[xlsx.utils.encode_cell({ r: i, c: 6 })]?.v) ??
+        undefined;
+      if (!row) continue;
+
+      rpyFileText = replaceTextInQuotes(rpyFileText, row + 2, translatedText);
+    }
+
+    return textEncoder.encode(rpyFileText);
+  };
+
   const handleTTRFile = ({
     file,
     onProgress,
     onSuccess,
-    onError,
   }: customRequestArgs) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -182,7 +231,37 @@ export default () => {
       // 解压
       const data = unzipSync(compressedData);
 
-      console.log(data);
+      const xlsxFilenameList = Object.keys(data).filter(
+        (name) => name.startsWith("xml") && name.endsWith("xlsx")
+      );
+
+      let files: any = new Object();
+
+      xlsxFilenameList.map((xlsxFilename, index) => {
+        // rpy 原始路径
+        const rpyRawPath = xlsxFilename.substring(4, xlsxFilename.length - 5);
+
+        // 处理文件
+        const processedRpyFile = processProcessedXlsx(
+          data[xlsxFilename],
+          data["raw/" + rpyRawPath]
+        );
+
+        files[rpyRawPath] = processedRpyFile;
+
+        onProgress({ total: xlsxFilenameList.length, loaded: index + 1 });
+      });
+
+      // 打包
+      const resultZip = zipSync(files);
+
+      // 下载
+      FileSaver.saveAs(
+        new Blob([resultZip], { type: "application/octet-stream" }),
+        `${file.name}-finished-${+new Date()}.zip`
+      );
+
+      onSuccess({});
     };
 
     reader.readAsArrayBuffer(file.fileInstance);

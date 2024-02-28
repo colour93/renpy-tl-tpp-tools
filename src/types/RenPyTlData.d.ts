@@ -5,4 +5,5 @@ export interface RenPyTlData {
   uuid?: string;
   old: string;
   new?: string;
+  line: number;
 }
