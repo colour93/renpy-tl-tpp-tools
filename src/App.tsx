@@ -15,7 +15,8 @@ const regex = {
   translateStringsItem:
     /^[ 	]+#\s*(\S+)\s*\r?\n +old *"(.*)" *\r?\n +new *".*" */gm,
   translateUUIDItem:
-    /^# (\S+)\r?\ntranslate (\w+) (\w+):(?:\r?\n)+[  ]+#.+"(.*)"\r?\n.+".*"/gm,
+    /^# (\S+)\r?\ntranslate (\w+) (\w+):(?:\r?\n)+[  ]+#[^"]+"(.*)"\r?\n.+".*"/gm,
+  noEncodeQuote: /(?<!\\)"/g,
 };
 
 const xlsxHeaders = [
@@ -26,6 +27,7 @@ const xlsxHeaders = [
   "Best translation",
   "Raw File",
   "RPY File Line",
+  "RPY Script Type",
 ];
 
 //=> Main Component
@@ -97,7 +99,16 @@ export default () => {
 
     const data = [
       xlsxHeaders,
-      ...result.map(({ old, rawFile, line }) => [old, , , , , rawFile, line]),
+      ...result.map(({ old, rawFile, line, type }) => [
+        old,
+        ,
+        ,
+        ,
+        ,
+        rawFile,
+        line,
+        type,
+      ]),
     ];
 
     const worksheet = xlsx.utils.aoa_to_sheet(data);
@@ -206,14 +217,21 @@ export default () => {
     // 从第二行开始遍历
     for (let i = 1; i < rowCount; i++) {
       const rawText = worksheet[xlsx.utils.encode_cell({ r: i, c: 0 })].v;
-      const translatedText =
-        worksheet[xlsx.utils.encode_cell({ r: i, c: 1 })]?.v ?? "";
+      const translatedText = (
+        worksheet[xlsx.utils.encode_cell({ r: i, c: 1 })]?.v ?? ""
+      ).replace(regex.noEncodeQuote, '\\"');
       const row: number | undefined =
         parseInt(worksheet[xlsx.utils.encode_cell({ r: i, c: 6 })]?.v) ??
         undefined;
+      const type: "strings" | "uuid" =
+        worksheet[xlsx.utils.encode_cell({ r: i, c: 7 })]?.v ?? "strings";
       if (!row) continue;
 
-      rpyFileText = replaceTextInQuotes(rpyFileText, row + 2, translatedText);
+      rpyFileText = replaceTextInQuotes(
+        rpyFileText,
+        row + (type === "strings" ? 2 : 4),
+        translatedText
+      );
     }
 
     return textEncoder.encode(rpyFileText);
