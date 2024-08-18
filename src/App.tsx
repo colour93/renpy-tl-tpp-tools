@@ -202,29 +202,33 @@ export default () => {
     reader.readAsArrayBuffer(file.fileInstance);
   };
 
-  const processProcessedXlsx = (xlsxFile: Uint8Array, rpyFile: Uint8Array) => {
+  const processProcessedXlsx = (outputFile: Uint8Array, rawFile: Uint8Array, rpyFile: Uint8Array) => {
     // 读入 rpyFile
     let rpyFileText = textDecoder.decode(rpyFile);
 
-    // 读取 xlsx
-    const workbook = xlsx.read(xlsxFile);
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    // 读取输出 xlsx
+    const outputWorkbook = xlsx.read(outputFile);
+    const outputWorksheet = outputWorkbook.Sheets[outputWorkbook.SheetNames[0]];
+
+    // 读取原始 xlsx
+    const rawWorkbook = xlsx.read(rawFile);
+    const rawWorksheet = rawWorkbook.Sheets[rawWorkbook.SheetNames[0]];
 
     // 获取行数
-    const range = xlsx.utils.decode_range(worksheet["!ref"]);
+    const range = xlsx.utils.decode_range(outputWorksheet["!ref"]);
     const rowCount = range.e.r - range.s.r + 1;
 
     // 从第二行开始遍历
     for (let i = 1; i < rowCount; i++) {
-      const rawText = worksheet[xlsx.utils.encode_cell({ r: i, c: 0 })].v;
+      const rawText = outputWorksheet[xlsx.utils.encode_cell({ r: i, c: 0 })].v;
       const translatedText = (
-        worksheet[xlsx.utils.encode_cell({ r: i, c: 1 })]?.v ?? ""
+        outputWorksheet[xlsx.utils.encode_cell({ r: i, c: 1 })]?.v ?? ""
       ).replace(regex.noEncodeQuote, '\\"');
       const row: number | undefined =
-        parseInt(worksheet[xlsx.utils.encode_cell({ r: i, c: 6 })]?.v) ??
+        parseInt(rawWorksheet[xlsx.utils.encode_cell({ r: i, c: 6 })]?.v) ??
         undefined;
       const type: "strings" | "uuid" =
-        worksheet[xlsx.utils.encode_cell({ r: i, c: 7 })]?.v ?? "strings";
+        rawWorksheet[xlsx.utils.encode_cell({ r: i, c: 7 })]?.v ?? "strings";
       if (!row) continue;
 
       rpyFileText = replaceTextInQuotes(
@@ -249,25 +253,29 @@ export default () => {
       // 解压
       const data = unzipSync(compressedData);
 
-      const xlsxFilenameList = Object.keys(data).filter(
-        (name) => name.startsWith("xml") && name.endsWith("xlsx")
+      const outputFilenameList = Object.keys(data).filter(
+        (name) => name.startsWith("output") && name.endsWith("xlsx")
       );
 
       let files: any = new Object();
 
-      xlsxFilenameList.map((xlsxFilename, index) => {
+      outputFilenameList.map((outputFilename, index) => {
+        // 原始 xlsx 路径
+        const xlsxPath = outputFilename.substring(7, outputFilename.length);
+
         // rpy 原始路径
-        const rpyRawPath = xlsxFilename.substring(4, xlsxFilename.length - 5);
+        const rpyRawPath = outputFilename.substring(7, outputFilename.length - 5);
 
         // 处理文件
         const processedRpyFile = processProcessedXlsx(
-          data[xlsxFilename],
+          data[outputFilename],
+          data["xml/" + xlsxPath],
           data["raw/" + rpyRawPath]
         );
 
         files[rpyRawPath] = processedRpyFile;
 
-        onProgress({ total: xlsxFilenameList.length, loaded: index + 1 });
+        onProgress({ total: outputFilenameList.length, loaded: index + 1 });
       });
 
       // 打包
