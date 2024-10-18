@@ -220,7 +220,7 @@ export default () => {
 
     // 从第二行开始遍历
     for (let i = 1; i < rowCount; i++) {
-      const rawText = outputWorksheet[xlsx.utils.encode_cell({ r: i, c: 0 })].v;
+      // const rawText = outputWorksheet[xlsx.utils.encode_cell({ r: i, c: 0 })].v;
       const translatedText = (
         outputWorksheet[xlsx.utils.encode_cell({ r: i, c: 1 })]?.v ?? ""
       ).replace(regex.noEncodeQuote, '\\"');

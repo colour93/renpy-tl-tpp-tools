@@ -15,7 +15,7 @@ export default defineConfig({
 	],
 	server: {
 		open: true,
-		port: 1024 //=> Dev 监听端口 | '一般在 3000 绑定失败时设置'
+		port: 24949 //=> Dev 监听端口 | '一般在 3000 绑定失败时设置'
 	},
 	build: {
 		rollupOptions: {
