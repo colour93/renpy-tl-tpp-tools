@@ -11,11 +11,11 @@ import Section from "@douyinfe/semi-ui/lib/es/form/section";
 
 const regex = {
   translateStringsGroup:
-    /^translate (\w+) strings:(?:\r?\n\r?\n[ 	]+# \S+\r?\n[ 	]+old ".*"\r?\n[ 	]+new ".*")+/gm,
+    /^translate (\w+) strings:(?:\r?\n\r?\n[ 	]+# .+\r?\n[ 	]+old ".*"\r?\n[ 	]+new ".*")+/gm,
   translateStringsItem:
-    /^[ 	]+#\s*(\S+)\s*\r?\n +old *"(.*)" *\r?\n +new *".*" */gm,
+    /^[ 	]+#\s*(.+)\s*\r?\n +old *"(.*)" *\r?\n +new *".*" */gm,
   translateUUIDItem:
-    /^# (\S+)\r?\ntranslate (\w+) (\w+):(?:\r?\n)+[  ]+#[^"]+"(.*)"\r?\n.+".*"/gm,
+    /^# (.+)\r?\ntranslate (\w+) (\w+):(?:\r?\n)+[  ]+#[^"]+"(.*)"\r?\n.+".*"/gm,
   noEncodeQuote: /(?<!\\)"/g,
 };
 
